@@ -306,7 +306,9 @@ deliberately ignored — a subagent finishing is not the turn finishing.
 This plugin vendors the Ulanzi UlanziDeck plugin SDK (`plugin-common-node`) at
 `com.ulanzi.claudesessions.ulanziPlugin/plugin/plugin-common-node`, which handles
 the WebSocket handshake and image-push protocol with Ulanzi Studio. It is
-© Ulanzi, MIT-licensed, from
-<https://github.com/UlanziTechnology/UlanziDeckPlugin-SDK>. The only runtime npm
-dependency is [`ws`](https://github.com/websockets/ws) (MIT). Everything else in
-this repo is original and MIT-licensed — see [LICENSE](LICENSE).
+© Ulanzi, from <https://github.com/UlanziTechnology/UlanziDeckPlugin-SDK>, and
+is used unmodified. Its upstream `LICENSE` is Apache-2.0 (note: its
+`package.json` declares MIT — the two disagree; the `LICENSE` file governs), and
+that Apache-2.0 text is reproduced alongside the vendored copy. The only runtime
+npm dependency is [`ws`](https://github.com/websockets/ws) (MIT). Everything else
+in this repo is original and MIT-licensed — see [LICENSE](LICENSE).

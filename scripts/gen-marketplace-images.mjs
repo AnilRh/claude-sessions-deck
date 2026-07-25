@@ -11,6 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
+import { renderTile } from '../com.ulanzi.claudesessions.ulanziPlugin/plugin/renderer.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Store-listing images live outside the plugin folder: they're for the
@@ -20,94 +21,28 @@ const APP_ICON_SVG = path.join(ROOT, 'com.ulanzi.claudesessions.ulanziPlugin', '
 const W = 366;
 const H = 244;
 const FONT = 'Helvetica, Arial, sans-serif';
-const MINI = '#3B4CC0'; // machine accent for "mini" (matches originColor hash)
 
-let clipN = 0;
+// Tiles are drawn by the SAME renderer the deck/board use (plugin/renderer.js),
+// embedded as data-URI <image>s — so store shots always match the real design
+// and can never drift. `machine` -> remote footer; `fresh` (0..1) shows the
+// recently-changed highlight. The generator's 'done' maps to the renderer's
+// 'done_unread'; other state names match.
+const STATE_MAP = { done: 'done_unread' };
 
-// Inner tile art in the renderer's 0..200 coordinate space, so shapes match
-// plugin/renderer.js. `machine` truthy -> remote footer; else local elapsed.
-function tileBody(state, { name = '', elapsed = '', machine = '' } = {}) {
-  const nameText = (y, fill) =>
-    name
-      ? `<text x="100" y="${y}" font-family="${FONT}" font-size="30" font-weight="700" text-anchor="middle" fill="${fill}">${name}</text>`
-      : '';
-  const elapsedText = (y, fill) =>
-    elapsed
-      ? `<text x="100" y="${y}" font-family="${FONT}" font-size="26" font-weight="600" text-anchor="middle" fill="${fill}">${elapsed}</text>`
-      : '';
-  const footer = () => {
-    const id = `clip${clipN++}`;
-    return (
-      `<clipPath id="${id}"><rect x="6" y="6" width="188" height="188" rx="44"/></clipPath>` +
-      `<g clip-path="url(#${id})">` +
-      `<rect x="6" y="154" width="188" height="40" fill="${MINI}"/>` +
-      `<text x="24" y="181" font-family="${FONT}" font-size="22" font-weight="700" letter-spacing="1" text-anchor="start" fill="#EEF3FA">${machine.toUpperCase()}</text>` +
-      (elapsed
-        ? `<text x="176" y="181" font-family="${FONT}" font-size="22" font-weight="600" text-anchor="end" fill="#EEF3FA">${elapsed}</text>`
-        : '') +
-      `</g>`
-    );
-  };
-  const R = `x="6" y="6" width="188" height="188" rx="44"`;
-  switch (state) {
-    case 'empty':
-      return `<rect ${R} fill="#141416"/><circle cx="100" cy="100" r="7" fill="#3A3A3E"/>`;
-    case 'idle':
-      return (
-        `<rect ${R} fill="#2C2C33"/>` +
-        `<circle cx="100" cy="70" r="7" fill="#6E7F94"/>` +
-        nameText(124, '#DEDEE4') +
-        (machine
-          ? footer()
-          : `<text x="100" y="156" font-family="${FONT}" font-size="20" font-weight="600" text-anchor="middle" fill="#7E7E88">idle · ${elapsed}</text>`)
-      );
-    case 'thinking': {
-      const dots = [0, 1, 2]
-        .map((i) => `<circle cx="${100 + (i - 1) * 30}" cy="66" r="${i === 1 ? 11 : 8}" fill="#FFFFFF" opacity="${i === 1 ? 0.95 : 0.55}"/>`)
-        .join('');
-      return (
-        `<rect ${R} fill="url(#grad)"/>` +
-        dots +
-        nameText(128, '#FFFFFF') +
-        (machine ? footer() : elapsedText(164, '#FFF3EC'))
-      );
-    }
-    case 'waiting':
-      return (
-        `<rect ${R} fill="#FFC53D"/>` +
-        `<text x="100" y="98" font-family="${FONT}" font-size="82" font-weight="800" text-anchor="middle" fill="#1C1C1E">?</text>` +
-        nameText(138, '#1C1C1E') +
-        (machine ? footer() : elapsedText(172, '#4A3A10'))
-      );
-    case 'done':
-      return (
-        `<rect ${R} fill="#2E9E4F"/>` +
-        `<path d="M 76 78 l 16 16 l 32 -34" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>` +
-        nameText(134, '#FFFFFF') +
-        (machine ? footer() : elapsedText(168, '#DDF5E4'))
-      );
-    case 'error':
-      return (
-        `<rect ${R} fill="#E5484D"/>` +
-        `<text x="100" y="98" font-family="${FONT}" font-size="82" font-weight="800" text-anchor="middle" fill="#FFFFFF">!</text>` +
-        nameText(138, '#FFFFFF') +
-        (machine ? footer() : elapsedText(172, '#FCE4E4'))
-      );
-    default:
-      return '';
-  }
-}
-
-function place(x, y, size, state, opts) {
-  const s = (size / 200).toFixed(4);
-  return `<g transform="translate(${x},${y}) scale(${s})">${tileBody(state, opts)}</g>`;
+function place(x, y, size, state, { name = '', elapsed = '', machine = '', fresh = 0 } = {}) {
+  const dataUrl = renderTile({
+    state: STATE_MAP[state] || state,
+    projectName: name,
+    elapsed,
+    serverLabel: machine,
+    freshness: fresh,
+  });
+  return `<image xlink:href="${dataUrl}" x="${x}" y="${y}" width="${size}" height="${size}"/>`;
 }
 
 function doc(inner) {
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
-    `<defs><linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">` +
-    `<stop offset="0" stop-color="#E08862"/><stop offset="1" stop-color="#C7603C"/></linearGradient></defs>` +
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
     `<rect width="${W}" height="${H}" rx="20" fill="#0C0C0F"/>` +
     inner +
     `</svg>`
