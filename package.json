@@ -1,6 +1,6 @@
 {
   "name": "claude-sessions-deck",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Ulanzi D200 live status board for concurrent Claude Code sessions",
   "type": "module",
   "private": true,

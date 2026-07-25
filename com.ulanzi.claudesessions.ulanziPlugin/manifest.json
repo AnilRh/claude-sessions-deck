@@ -3,7 +3,7 @@
   "Name": "Claude Sessions",
   "Description": "Live status board for concurrent Claude Code sessions",
   "Icon": "assets/store-icon.png",
-  "Version": "1.0.0",
+  "Version": "1.1.0",
   "Category": "Claude Code",
   "CategoryIcon": "assets/store-icon.png",
   "CodePath": "plugin/app.js",
