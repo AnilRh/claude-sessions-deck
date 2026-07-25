@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,minimal-ui,viewport-fit=cover" />
+  <title>Claude Sessions</title>
+  <link rel="stylesheet" href="../../libs/css/uspi.css">
+  <style>
+    .note { padding: 6px 12px; font-size: 11px; opacity: 0.65; line-height: 1.5; }
+    .uspi-item-value input, .uspi-item-value select { color: #fff; background: rgba(255,255,255,0.08); }
+    .hooks-value { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+    .hooks-status { font-size: 12px; opacity: 0.85; }
+    .hooks-status.bad { color: #F0999B; opacity: 1; }
+    .hooks-status.ok { color: #8FD6A6; opacity: 1; }
+    .hooks-btns button { color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); border-radius: 5px; padding: 3px 9px; font-size: 12px; cursor: pointer; }
+    .hooks-btns button:hover { background: rgba(255,255,255,0.16); }
+    .server-list { display: flex; flex-direction: column; gap: 4px; width: 100%; margin: 4px 0; }
+    .server-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; background: rgba(255,255,255,0.06); border-radius: 5px; padding: 4px 8px; }
+    .server-row code { color: #cfe3ff; }
+    .server-row button { color: #F0999B; background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+    .server-empty { font-size: 12px; opacity: 0.6; }
+    .server-add { display: flex; gap: 6px; width: 100%; margin-top: 4px; }
+    .server-add input { flex: 1; min-width: 0; color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 5px; padding: 3px 6px; font-size: 12px; }
+    .server-add button { color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+    .server-err { font-size: 11px; color: #F0999B; min-height: 14px; }
+  </style>
+</head>
+<body>
+  <div class="udpi-wrapper hidden uspi-wrapper">
+    <form id="property-inspector">
+      <div class="uspi-item">
+        <div class="uspi-item-label" data-localize="httpPort">Hook server port</div>
+        <div class="uspi-item-value">
+          <input type="number" id="httpPort" min="1024" max="65535" step="1">
+        </div>
+      </div>
+      <div class="uspi-item">
+        <div class="uspi-item-label" data-localize="staleTimeout">Stale session timeout (min)</div>
+        <div class="uspi-item-value">
+          <input type="number" id="staleTimeoutMin" min="1" max="1440" step="1">
+        </div>
+      </div>
+      <div class="uspi-item">
+        <div class="uspi-item-label" data-localize="focusApp">Focus app on press</div>
+        <div class="uspi-item-value">
+          <select id="focusApp"></select>
+        </div>
+      </div>
+      <div class="uspi-item">
+        <div class="uspi-item-label" data-localize="nameSource">Button name</div>
+        <div class="uspi-item-value">
+          <select id="nameSource">
+            <option value="title">Session title</option>
+            <option value="folder">Folder name</option>
+          </select>
+        </div>
+      </div>
+      <div class="uspi-item">
+        <div class="uspi-item-label" data-localize="slotOrder">Key order</div>
+        <div class="uspi-item-value">
+          <select id="slotOrder">
+            <option value="fixed">Fixed (keep positions)</option>
+            <option value="compact">Compact (fill gaps)</option>
+            <option value="grouped">Group: local first</option>
+          </select>
+        </div>
+      </div>
+      <div class="uspi-item">
+        <div class="uspi-item-label" data-localize="animateThinking">Animate thinking state</div>
+        <div class="uspi-item-value">
+          <input type="checkbox" id="animateThinking">
+        </div>
+      </div>
+      <div class="uspi-item" style="align-items:flex-start;">
+        <div class="uspi-item-label" data-localize="hooks">Claude Code hooks</div>
+        <div class="uspi-item-value hooks-value">
+          <span id="hooksStatus" class="hooks-status">checking…</span>
+          <span class="hooks-btns">
+            <button id="hooksInstall" type="button">Install / update</button>
+            <button id="hooksRemove" type="button">Remove</button>
+          </span>
+        </div>
+      </div>
+      <div class="uspi-item" style="flex-direction:column; align-items:stretch;">
+        <div class="uspi-item-label" style="margin-bottom:4px;">Remote machines</div>
+        <div id="serverList" class="server-list"></div>
+        <div class="server-add">
+          <input id="srvOrigin" type="text" placeholder="label" maxlength="32">
+          <input id="srvTarget" type="text" placeholder="user@host">
+          <button id="srvAdd" type="button">Add</button>
+        </div>
+        <div id="srvErr" class="server-err"></div>
+      </div>
+      <div class="note">
+        Settings apply to all Session Slot keys. Claude Code needs these hooks to
+        report session events — use <strong>Install / update</strong> above (it
+        targets the port set here). Take effect on the next session you start.
+        A remote machine also needs the reverse SSH tunnel plus its hooks —
+        <code>ORIGIN=&lt;label&gt; npm run remote-hooks</code> and
+        <code>remote-tunnel-setup.sh</code>.
+      </div>
+    </form>
+  </div>
+
+  <script src="../../libs/js/constants.js"></script>
+  <script src="../../libs/js/eventEmitter.js"></script>
+  <script src="../../libs/js/timers.js"></script>
+  <script src="../../libs/js/utils.js"></script>
+  <script src="../../libs/js/ulanziApi.js"></script>
+  <script src="./inspector.js"></script>
+</body>
+</html>

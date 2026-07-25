@@ -1,0 +1,33 @@
+{
+  "Author": "Anil Rhemtulla",
+  "Name": "Claude Sessions",
+  "Description": "Live status board for concurrent Claude Code sessions",
+  "Icon": "assets/store-icon.png",
+  "Version": "1.0.0",
+  "Category": "Claude Code",
+  "CategoryIcon": "assets/store-icon.png",
+  "CodePath": "plugin/app.js",
+  "Type": "JavaScript",
+  "PrivateAPI": true,
+  "UUID": "com.ulanzi.ulanzistudio.claudesessions",
+  "Actions": [
+    {
+      "Name": "Session Slot",
+      "Icon": "plugin/icons/sessionslot/action.png",
+      "PropertyInspectorPath": "property-inspector/sessionslot/inspector.html",
+      "state": 0,
+      "States": [
+        { "Name": "Idle", "Image": "plugin/icons/sessionslot/idle.png" }
+      ],
+      "Tooltip": "Claude Code session status. Press: acknowledge finished session or focus the terminal.",
+      "UUID": "com.ulanzi.ulanzistudio.claudesessions.sessionslot",
+      "SupportedInMultiActions": false,
+      "DisableAutomaticStates": true,
+      "Controllers": ["Keypad"]
+    }
+  ],
+  "OS": [
+    { "Platform": "mac", "MinimumVersion": "12.0" }
+  ],
+  "Software": { "MinVersion": "3.0.0" }
+}

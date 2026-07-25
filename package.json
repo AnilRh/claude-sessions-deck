@@ -1,0 +1,25 @@
+{
+  "name": "claude-sessions-deck",
+  "version": "1.0.0",
+  "description": "Ulanzi D200 live status board for concurrent Claude Code sessions",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/AnilRh/claude-sessions-deck.git" },
+  "homepage": "https://github.com/AnilRh/claude-sessions-deck#readme",
+  "bugs": { "url": "https://github.com/AnilRh/claude-sessions-deck/issues" },
+  "engines": { "node": ">=18.2" },
+  "scripts": {
+    "test": "node --test",
+    "headless": "cd com.ulanzi.claudesessions.ulanziPlugin && { [ -d node_modules/ws ] || npm install --omit=dev --silent; } && node plugin/app.js --headless",
+    "headless:agent": "bash scripts/headless-agent.sh",
+    "install:plugin": "bash scripts/install-plugin.sh",
+    "hooks:install": "node scripts/hooks-install.js",
+    "hooks:uninstall": "node scripts/hooks-uninstall.js",
+    "fake-events": "bash scripts/fake-events.sh",
+    "package": "bash scripts/package-plugin.sh",
+    "images": "node scripts/gen-marketplace-images.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "remote-hooks": "bash scripts/remote-hooks.sh"
+  }
+}

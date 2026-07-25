@@ -1,0 +1,8 @@
+{
+  "Localization": {
+    "httpPort": "Hook server port",
+    "staleTimeout": "Stale session timeout (min)",
+    "focusApp": "Focus app on press",
+    "animateThinking": "Animate thinking state"
+  }
+}

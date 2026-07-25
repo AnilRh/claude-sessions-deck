@@ -1,0 +1,19 @@
+# Local Claude Code settings (contains machine-specific absolute paths)
+.claude/settings.local.json
+
+# Runtime files the plugin generates in its install dir — never commit
+com.ulanzi.claudesessions.ulanziPlugin/config.json
+com.ulanzi.claudesessions.ulanziPlugin/sessions.json
+config.json
+sessions.json
+
+# Dependencies — reinstalled via npm; bundled into the .ulanziPlugin at package time
+node_modules/
+
+# Build output
+dist/
+
+# Backups and OS cruft
+*.bak
+*.bak.*
+.DS_Store
