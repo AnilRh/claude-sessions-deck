@@ -19,6 +19,7 @@
     "fake-events": "bash scripts/fake-events.sh",
     "package": "bash scripts/package-plugin.sh",
     "images": "node scripts/gen-marketplace-images.mjs",
+    "demo": "node scripts/gen-demo-gif.mjs",
     "doctor": "node scripts/doctor.mjs",
     "remote-hooks": "bash scripts/remote-hooks.sh"
   }
