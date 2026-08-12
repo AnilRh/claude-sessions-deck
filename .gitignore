@@ -4,8 +4,10 @@
 # Runtime files the plugin generates in its install dir — never commit
 com.ulanzi.claudesessions.ulanziPlugin/config.json
 com.ulanzi.claudesessions.ulanziPlugin/sessions.json
+com.ulanzi.claudesessions.ulanziPlugin/instance.lock
 config.json
 sessions.json
+instance.lock
 
 # Dependencies — reinstalled via npm; bundled into the .ulanziPlugin at package time
 node_modules/

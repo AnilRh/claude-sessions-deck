@@ -27,6 +27,7 @@ rm -f "$OUT" "$PKG"
 ( cd "$REPO_DIR" && zip -r -q "$OUT" "$PLUGIN" \
     -x "$PLUGIN/config.json" \
     -x "$PLUGIN/sessions.json" \
+    -x "$PLUGIN/instance.lock" \
     -x "*/.DS_Store" \
     -x "*.bak" -x "*.bak.*" )
 

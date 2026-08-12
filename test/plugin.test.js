@@ -152,6 +152,18 @@ test('permission gap recovers: PermissionRequest -> waiting -> heartbeat -> thin
   assert.equal(mgr.ingest(ev('PostToolUse')).state, 'thinking');
 });
 
+test('a reordered PreToolUse must not knock a session out of waiting', () => {
+  const { mgr } = makeManager();
+  mgr.ingest(ev('UserPromptSubmit'));
+  assert.equal(mgr.ingest(ev('PermissionRequest')).state, 'waiting');
+  // Hooks POST async: the PreToolUse that causally preceded the PermissionRequest
+  // can arrive after it. It must NOT flip the amber tile back to thinking.
+  assert.equal(mgr.ingest(ev('PreToolUse')), null, 'reordered PreToolUse is ignored while waiting');
+  assert.equal(mgr.sessions.get(SID).state, 'waiting', 'tile stays amber');
+  // A genuine PostToolUse (the tool actually ran) still recovers to thinking.
+  assert.equal(mgr.ingest(ev('PostToolUse')).state, 'thinking');
+});
+
 test('Stop -> done_unread; SessionEnd on a done tile does not re-alert', () => {
   const { mgr } = makeManager();
   mgr.ingest(ev('UserPromptSubmit'));

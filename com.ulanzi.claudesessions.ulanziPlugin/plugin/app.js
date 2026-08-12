@@ -6,13 +6,32 @@ import { renderTile, tileCacheKey, formatElapsed, STATES } from './renderer.js';
 import { focusApp, FOCUS_APPS, setDesktopMode } from './focus.js';
 import { loadConfig, saveConfig, sanitize, DEFAULTS, SESSIONS_PATH } from './config.js';
 import { installHooks, uninstallHooks, hookStatus } from './hooks.js';
+import fs from 'fs';
+import path from 'path';
+import { execFileSync } from 'child_process';
 
 const PLUGIN_UUID = 'com.ulanzi.ulanzistudio.claudesessions';
+
+// Single-instance lock. Ulanzi Studio can spawn a fresh plugin process on its
+// own restarts without reaping the previous one; if the old instance stays
+// connected it keeps driving the deck (with stale/no session data, since only
+// one instance can own the hook port), which is what wedged the deck twice.
+// A new instance evicts the previous one on startup so there's only ever one.
+const LOCK_PATH = path.join(path.dirname(SESSIONS_PATH), 'instance.lock');
 
 const TICK_MS = 1000;
 const STALE_SWEEP_EVERY_TICKS = 30;
 const LONG_PRESS_MS = 600;
 const RECONNECT_DELAY_MS = 3000;
+// The deck draws pushed images over USB and can't keep up with a flood of them
+// (animation frames every tick + a full re-push of every key on profile
+// switch), so updates back up and lag by minutes. Two mitigations: toggle the
+// thinking-dots frame every 2 ticks instead of every tick, and funnel all
+// pushes through a coalescing, rate-limited queue (only the latest image per
+// key is ever sent, and no more than a few per drain).
+const ANIM_PERIOD_TICKS = 2;
+const PUSH_DRAIN_MS = 120;
+const PUSH_MAX_PER_DRAIN = 6;
 // How long a just-finished (done/error) tile reads as "fresh" before it
 // settles to the normal colour — so a tile that just turned green stands out
 // from a backlog you'll get to later. Quantized into steps for the tile cache
@@ -79,6 +98,9 @@ function focusReport(msg) {
 
 /** last pushed tile cache key per context */
 const lastPushed = new Map();
+/** coalesced pending pushes: context -> latest tile data URL not yet sent */
+const pendingPush = new Map();
+let drainTimer = null;
 /** keydown timestamps per context, for synthesized long-press */
 const keyDownAt = new Map();
 
@@ -138,9 +160,30 @@ function renderAll() {
     const key = tileCacheKey(props);
     if (lastPushed.get(context) !== key) {
       lastPushed.set(context, key);
-      $UD.setBaseDataIcon(context, renderTile(props));
+      // Queue (coalescing) rather than sending now; the drainer rate-limits the
+      // actual pushes so the deck can't get flooded. A newer render for the same
+      // context overwrites the pending image, so we never send a stale frame.
+      pendingPush.set(context, renderTile(props));
     }
   });
+}
+
+// Send at most PUSH_MAX_PER_DRAIN queued tiles to the deck, oldest first. Runs
+// on a short interval; because pending holds only the latest image per key,
+// bursts (profile switch) and animation frames drain smoothly instead of
+// backing up on the deck's USB pipe.
+function drainPushes() {
+  let n = 0;
+  for (const [context, url] of pendingPush) {
+    if (n >= PUSH_MAX_PER_DRAIN) break;
+    pendingPush.delete(context);
+    try {
+      $UD.setBaseDataIcon(context, url);
+    } catch (e) {
+      log(`push failed: ${e?.message}`);
+    }
+    n++;
+  }
 }
 
 // State for the on-screen board: every live session (not just the ones on
@@ -163,8 +206,8 @@ function boardState() {
 }
 
 function tick() {
-  frame = (frame + 1) % 2;
   tickCount++;
+  if (tickCount % ANIM_PERIOD_TICKS === 0) frame ^= 1; // pulse dots every 2s, not 1s
   if (tickCount % STALE_SWEEP_EVERY_TICKS === 0) manager.pruneStale();
   renderAll();
 }
@@ -357,7 +400,46 @@ async function applyConfig(next) {
 
 // --- lifecycle -------------------------------------------------------------------
 
+// --- single-instance lock -----------------------------------------------------
+
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+const isAlive = (pid) => {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+};
+// Confirm a PID is actually one of our plugin instances before signalling it,
+// so a reused PID belonging to some unrelated process is never killed.
+function isOurInstance(pid) {
+  try {
+    const cmd = execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' });
+    return cmd.includes('claudesessions.ulanziPlugin') && cmd.includes('app.js');
+  } catch {
+    return false;
+  }
+}
+
+// Evict any previous instance, then record our PID as the live one. Called
+// before we bind the hook port, so the old instance releases it (and its Studio
+// WebSocket) first — a clean handoff; session state survives via sessions.json.
+async function claimSingleton() {
+  let prev = 0;
+  try { prev = parseInt(String(fs.readFileSync(LOCK_PATH, 'utf8')).trim(), 10) || 0; } catch {}
+  if (prev && prev !== process.pid && isAlive(prev) && isOurInstance(prev)) {
+    log(`evicting previous instance (pid ${prev})`);
+    try { process.kill(prev, 'SIGTERM'); } catch {}
+    for (let i = 0; i < 30 && isAlive(prev); i++) await delay(100); // wait up to ~3s
+    if (isAlive(prev)) { try { process.kill(prev, 'SIGKILL'); } catch {} await delay(200); }
+  }
+  try { fs.writeFileSync(LOCK_PATH, String(process.pid)); } catch (e) { log(`lock write failed: ${e?.message}`); }
+}
+
+function releaseLock() {
+  try {
+    if (parseInt(String(fs.readFileSync(LOCK_PATH, 'utf8')).trim(), 10) === process.pid) fs.unlinkSync(LOCK_PATH);
+  } catch {}
+}
+
 async function start() {
+  await claimSingleton();
   try {
     await server.listen(config.httpPort);
   } catch (e) {
@@ -393,6 +475,7 @@ async function start() {
     $UD.connect(PLUGIN_UUID);
   }
   tickTimer = setInterval(tick, TICK_MS);
+  drainTimer = setInterval(drainPushes, PUSH_DRAIN_MS);
 }
 
 $UD.onClose(async () => {
@@ -429,10 +512,12 @@ async function shutdown(code = 0) {
   shuttingDown = true;
   log('shutting down');
   if (tickTimer) clearInterval(tickTimer);
+  if (drainTimer) clearInterval(drainTimer);
   await server.close();
   try {
     $UD.websocket?.close();
   } catch {}
+  releaseLock();
   process.exit(code);
 }
 

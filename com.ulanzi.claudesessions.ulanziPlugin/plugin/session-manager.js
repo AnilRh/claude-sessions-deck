@@ -221,9 +221,18 @@ export default class SessionManager {
         // error state, distinct from a normal finish. Tool-level failures
         // (PostToolUseFailure) stay heartbeats — Claude usually recovers.
         return STATES.ERROR;
-      default:
-        if (HEARTBEAT_EVENTS.has(event)) return STATES.THINKING;
-        return null; // SubagentStop, SessionStart, unknown events: no signal
+      default: {
+        if (!HEARTBEAT_EVENTS.has(event)) return null; // SubagentStop, SessionStart, unknown
+        // Tool events imply Claude is working. But the hook order for a
+        // permission-gated tool is PreToolUse -> PermissionRequest -> PostToolUse,
+        // and our hooks POST async (fire-and-forget), so a PreToolUse can arrive
+        // AFTER the PermissionRequest it preceded. Ignoring PreToolUse while
+        // already WAITING stops that reordered event from flipping the amber
+        // "needs you" tile back to thinking. PostToolUse/PostToolUseFailure mean
+        // the tool actually ran (we're past the prompt), so they DO recover.
+        if (event === 'PreToolUse' && existing && existing.state === STATES.WAITING) return null;
+        return STATES.THINKING;
+      }
     }
   }
 
