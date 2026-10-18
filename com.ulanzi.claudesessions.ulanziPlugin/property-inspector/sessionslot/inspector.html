@@ -10,10 +10,16 @@
        option list isn't white-on-white when opened on macOS. */
     :root { color-scheme: dark; }
     .note { padding: 6px 12px; font-size: 11px; opacity: 0.65; line-height: 1.5; }
-    .uspi-item-value input, .uspi-item-value select { color: #fff; background: rgba(255,255,255,0.08); }
+    /* Text/number inputs get the dark field styling — but NOT checkboxes: a
+       background on a checkbox replaces its native appearance with a faint,
+       nearly invisible square (why the Animate toggle looked missing). */
+    .uspi-item-value input:not([type="checkbox"]), .uspi-item-value select { color: #fff; background: rgba(255,255,255,0.08); }
     /* Explicit option colours as a cross-platform backstop (honoured where the
        popup isn't fully native, e.g. Windows/Linux). */
     .uspi-item-value select option { color: #fff; background: #26262b; }
+    /* The checkbox itself is display:none in uspi.css; its +label is the visible
+       control (a check glyph, from the framework). Make that label clickable. */
+    .uspi-item-value input[type="checkbox"] + label { cursor: pointer; user-select: none; }
     .hooks-value { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
     .hooks-status { font-size: 12px; opacity: 0.85; }
     .hooks-status.bad { color: #F0999B; opacity: 1; }
@@ -75,6 +81,7 @@
         <div class="uspi-item-label" data-localize="animateThinking">Animate thinking state</div>
         <div class="uspi-item-value">
           <input type="checkbox" id="animateThinking">
+          <label for="animateThinking">on</label>
         </div>
       </div>
       <div class="uspi-item" style="align-items:flex-start;">

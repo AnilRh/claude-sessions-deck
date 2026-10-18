@@ -65,10 +65,22 @@ const manager = new SessionManager({
   servers: config.servers,
   slotOrder: config.slotOrder,
 });
+// Diagnostics counters, exposed at GET /board/stats — so we can see exactly
+// what's being sent to the deck (push rate, re-render/setactive frequency)
+// instead of guessing at the source of lag.
+const stats = { start: Date.now(), pushes: 0, renders: 0, ticks: 0, setActive: 0, adds: 0, clears: 0, events: 0 };
 const server = new HookServer({
-  onEvent: (p) => manager.ingest(p),
+  onEvent: (p) => { stats.events++; manager.ingest(p); },
   getBoard: boardState,
   onBoardAction: (id, action) => boardAction(id, action),
+  getStats: () => ({
+    ...stats,
+    uptimeSec: Math.round((Date.now() - stats.start) / 1000),
+    pending: pendingPush.size,
+    contexts: registry.contexts().length,
+    sessions: manager.sessions.size,
+    animateThinking: config.animateThinking,
+  }),
   log,
 });
 
@@ -152,6 +164,7 @@ function freshnessOf(session, now) {
 }
 
 function renderAll() {
+  stats.renders++;
   const contexts = registry.contexts();
   const now = Date.now();
   contexts.forEach((context, slotIdx) => {
@@ -179,6 +192,7 @@ function drainPushes() {
     pendingPush.delete(context);
     try {
       $UD.setBaseDataIcon(context, url);
+      stats.pushes++;
     } catch (e) {
       log(`push failed: ${e?.message}`);
     }
@@ -206,6 +220,7 @@ function boardState() {
 }
 
 function tick() {
+  stats.ticks++;
   tickCount++;
   if (tickCount % ANIM_PERIOD_TICKS === 0) frame ^= 1; // pulse dots every 2s, not 1s
   if (tickCount % STALE_SWEEP_EVERY_TICKS === 0) manager.pruneStale();
@@ -283,6 +298,7 @@ $UD.onConnected(() => {
 });
 
 $UD.onAdd((msg) => {
+  stats.adds++;
   log('key added', msg.context);
   registry.add(msg.context);
   lastPushed.delete(msg.context);
@@ -291,6 +307,7 @@ $UD.onAdd((msg) => {
 
 $UD.onClear((msg) => {
   if (!msg.param) return;
+  stats.clears += msg.param.length;
   for (const item of msg.param) {
     log('key cleared', item.context);
     registry.removeByContext(item.context);
@@ -324,6 +341,7 @@ $UD.onKeyUp((msg) => {
 
 $UD.onSetActive(() => {
   // Profile page became visible again: force a full re-push.
+  stats.setActive++;
   lastPushed.clear();
   scheduleRender();
 });

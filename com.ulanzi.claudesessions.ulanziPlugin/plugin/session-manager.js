@@ -14,8 +14,10 @@ const SAVE_DEBOUNCE_MS = 400;
 const MAX_SSH_TITLE_READS = 3; // cap concurrent ssh title reads across sessions
 const TITLE_RETRY_MS = 10 * 1000; // re-read this often (on events) while no title yet
 const TITLE_RECHECK_MS = 90 * 1000; // re-read this often (on events) once a title is known
-const TITLE_HEAD_BYTES = 64 * 1024; // auto-summary sits near the top
-const TITLE_TAIL_BYTES = 128 * 1024; // a /rename appends a custom-title near the end
+// grep pattern for the transcript records that carry a title. A title can sit
+// ANYWHERE in the file (a rename done early is buried mid-file as the chat grows),
+// so we grep for just these lines rather than sampling head+tail.
+const TITLE_GREP = '"(custom-title|ai-title|summary)"';
 
 export default class SessionManager {
   /**
@@ -103,6 +105,11 @@ export default class SessionManager {
         titleCheckedAt: 0, // force a re-check after restart
       });
     }
+    // Restored idle/done sessions get no further events, so run a one-time title
+    // resolution pass now (titleCheckedAt was reset to 0 above; the per-call
+    // throttle + SSH concurrency cap still apply). Without this, a session that
+    // won't emit another event keeps its stale folder-name label after a restart.
+    for (const s of this.sessions.values()) this.maybeResolveTitle(s);
   }
 
   /** Debounced, atomic write of the current sessions to persistPath. */
@@ -388,49 +395,44 @@ export default class SessionManager {
 }
 
 // Scan transcript text (JSONL) for the current title: the latest
-// {"type":"custom-title"} (set by a rename) wins over the latest
-// {"type":"summary"} (Claude's auto-title). Returns the string or null.
+// {"type":"custom-title"} (a rename) wins over the latest {"type":"ai-title"}
+// (Claude's auto-title; older transcripts used {"type":"summary"}). Returns
+// the string or null.
 function parseTitleFromText(text) {
   let customTitle = null;
+  let aiTitle = null;
   let summary = null;
   for (const line of text.split('\n')) {
-    if (!line.includes('"custom-title"') && !line.includes('"summary"')) continue;
+    if (!line.includes('"custom-title"') && !line.includes('"ai-title"') && !line.includes('"summary"')) continue;
     let rec;
     try {
       rec = JSON.parse(line);
     } catch {
       continue;
     }
+    // Latest of each kind wins. Priority: a user rename (custom-title) over
+    // Claude's auto-title (ai-title, formerly "summary").
     if (rec.type === 'custom-title' && typeof rec.customTitle === 'string') customTitle = rec.customTitle;
+    else if (rec.type === 'ai-title' && typeof rec.aiTitle === 'string') aiTitle = rec.aiTitle;
     else if (rec.type === 'summary' && typeof rec.summary === 'string') summary = rec.summary;
   }
-  const t = (customTitle || summary || '').trim();
+  const t = (customTitle || aiTitle || summary || '').trim();
   return t || null;
 }
 
 // Local transcript: read only the head + tail to bound cost.
-async function readTranscriptTitle(file) {
-  let handle;
-  try {
-    handle = await fs.promises.open(file, 'r');
-    const { size } = await handle.stat();
-    const readAt = async (pos, len) => {
-      const buf = Buffer.allocUnsafe(len);
-      const { bytesRead } = await handle.read(buf, 0, len, pos);
-      return buf.subarray(0, bytesRead).toString('utf8');
-    };
-    let text;
-    if (size <= TITLE_HEAD_BYTES + TITLE_TAIL_BYTES) {
-      text = await readAt(0, size);
-    } else {
-      text = (await readAt(0, TITLE_HEAD_BYTES)) + '\n' + (await readAt(size - TITLE_TAIL_BYTES, TITLE_TAIL_BYTES));
-    }
-    return parseTitleFromText(text);
-  } catch {
-    return null;
-  } finally {
-    if (handle) await handle.close().catch(() => {});
-  }
+function readTranscriptTitle(file) {
+  // grep just the title lines out of the whole file (any size), so a title record
+  // buried in the middle of a long transcript is still found. Cheap — only the
+  // matching lines are read into memory, not the whole multi-MB file.
+  return new Promise((resolve) => {
+    execFile(
+      'grep',
+      ['-aE', TITLE_GREP, file],
+      { timeout: 8000, maxBuffer: 4 * 1024 * 1024 },
+      (_err, stdout) => resolve(stdout ? parseTitleFromText(stdout) : null)
+    );
+  });
 }
 
 // Remote transcript: read head + tail over SSH (reuses the resume ssh target).
@@ -440,7 +442,7 @@ function readRemoteTranscriptTitle(sshTarget, remotePath) {
   if (!/^[\w.@-]{1,128}$/.test(sshTarget) || !/^[\w /.@:+-]{1,512}$/.test(remotePath)) {
     return Promise.resolve(null);
   }
-  const cmd = `head -c ${TITLE_HEAD_BYTES} '${remotePath}' 2>/dev/null; printf '\\n'; tail -c ${TITLE_TAIL_BYTES} '${remotePath}' 2>/dev/null`;
+  const cmd = `grep -aE '${TITLE_GREP}' '${remotePath}' 2>/dev/null`;
   return new Promise((resolve) => {
     execFile(
       'ssh',

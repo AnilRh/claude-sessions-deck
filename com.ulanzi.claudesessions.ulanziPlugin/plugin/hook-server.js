@@ -26,10 +26,11 @@ export default class HookServer {
    *   a board press ('press'|'clear') for a session id; omit for read-only board.
    * @param {(msg: string) => void} [opts.log]
    */
-  constructor({ onEvent, getBoard = null, onBoardAction = null, log = () => {} }) {
+  constructor({ onEvent, getBoard = null, onBoardAction = null, getStats = null, log = () => {} }) {
     this.onEvent = onEvent;
     this.getBoard = getBoard;
     this.onBoardAction = onBoardAction;
+    this.getStats = getStats;
     this.log = log;
     this.server = null;
     this.port = null;
@@ -86,6 +87,16 @@ export default class HookServer {
         res
           .writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
           .end(body);
+        return;
+      }
+      if (url.pathname === '/board/stats' && this.getStats) {
+        let body = '{}';
+        try {
+          body = JSON.stringify(this.getStats());
+        } catch (e) {
+          this.log(`stats failed: ${e?.message}`);
+        }
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(body);
         return;
       }
       if (url.pathname === '/board/manifest.webmanifest') {
