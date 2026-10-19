@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **OpenAI Codex support** — Codex sessions (CLI, IDE extension, or the ChatGPT
+  desktop app's Codex mode) now appear on the deck and web board via Codex's own
+  hooks, marked with a small hexagon and named from your Codex thread titles.
+  One-click install in the Property Inspector, or `npm run codex-hooks:install`;
+  trust them once via `/hooks` in Codex.
+- `/board/stats` diagnostics endpoint (push rate, events received, sessions).
+
+### Fixed
+
+- Session names falling back to the folder name ("Personal", "Personal·2") on
+  long conversations — the title is now found anywhere in the transcript, and the
+  current `ai-title` record format is recognized.
+- A permission prompt's amber tile could flip back to "thinking" when hook events
+  arrived out of order.
+- Duplicate plugin processes after a Ulanzi Studio restart could leave the deck
+  frozen on stale tiles — a new instance now evicts the old one.
+- The deck lagging minutes behind under load — image pushes are now coalesced
+  and rate-limited, and the thinking animation pulses every 2s.
+- The "Animate thinking" checkbox was invisible in the Property Inspector.
+- `npm run doctor` now calls out an invalid `~/.claude/settings.json` (which
+  makes Claude Code silently ignore every hook).
+
 ## 1.1.0 — 2026-07-25
 
 ### Added

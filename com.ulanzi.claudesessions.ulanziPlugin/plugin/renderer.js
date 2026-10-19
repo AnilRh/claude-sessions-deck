@@ -277,6 +277,25 @@ function renderError({ projectName, elapsed, serverLabel, freshness = 0 }) {
   return svgDoc(body);
 }
 
+// A small hexagon in the top-left corner marks an OpenAI Codex session so it
+// reads apart from Claude Code tiles at a glance. Drawn in the tile's own
+// foreground colour (dark on amber, muted on idle) so it suits every state, and
+// placed clear of the centred status glyph and the bottom footer/elapsed line.
+const MARK_COLOR = { [STATES.WAITING]: '#1C1C1E', [STATES.IDLE]: '#DEDEE4' };
+function codexMark(state) {
+  const color = MARK_COLOR[state] || '#FFFFFF';
+  const cx = 37;
+  const cy = 37;
+  const r = 12;
+  const pts = [0, 1, 2, 3, 4, 5]
+    .map((i) => {
+      const a = (Math.PI / 180) * (60 * i - 30);
+      return `${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`;
+    })
+    .join(' ');
+  return `<polygon points="${pts}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" opacity="0.85"/>`;
+}
+
 /**
  * Render a tile for a slot.
  * @param {object} p
@@ -285,9 +304,18 @@ function renderError({ projectName, elapsed, serverLabel, freshness = 0 }) {
  * @param {string} [p.elapsed] preformatted elapsed label ("4m")
  * @param {number} [p.frame] animation frame (thinking only)
  * @param {number} [p.freshness] 1→0 recency for done/error tiles (see app.js)
+ * @param {string} [p.source] 'codex' adds the Codex corner mark (default Claude Code)
  * @returns {string} SVG data URL
  */
-export function renderTile({ state, projectName = '', elapsed = '', frame = 0, serverLabel = '', freshness = 0 }) {
+export function renderTile({
+  state,
+  projectName = '',
+  elapsed = '',
+  frame = 0,
+  serverLabel = '',
+  freshness = 0,
+  source = '',
+}) {
   let svg;
   switch (state) {
     case STATES.THINKING:
@@ -308,6 +336,7 @@ export function renderTile({ state, projectName = '', elapsed = '', frame = 0, s
     default:
       svg = renderEmpty();
   }
+  if (source === 'codex' && state !== STATES.EMPTY) svg = svg.replace('</svg>', `${codexMark(state)}</svg>`);
   return toDataUrl(svg);
 }
 
@@ -316,6 +345,14 @@ export function renderTile({ state, projectName = '', elapsed = '', frame = 0, s
  * changes for a context. minuteBucket keeps elapsed labels fresh without
  * re-pushing untouched keys every tick.
  */
-export function tileCacheKey({ state, projectName = '', elapsed = '', frame = 0, serverLabel = '', freshness = 0 }) {
-  return `${state}|${projectName}|${elapsed}|${state === STATES.THINKING ? frame : 0}|${serverLabel}|${freshness}`;
+export function tileCacheKey({
+  state,
+  projectName = '',
+  elapsed = '',
+  frame = 0,
+  serverLabel = '',
+  freshness = 0,
+  source = '',
+}) {
+  return `${state}|${projectName}|${elapsed}|${state === STATES.THINKING ? frame : 0}|${serverLabel}|${freshness}|${source}`;
 }

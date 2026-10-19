@@ -83,7 +83,11 @@ report(httpCode === '200' ? 'ok' : 'bad', 'End-to-end POST', httpCode ? `HTTP ${
 // Local hooks in ~/.claude/settings.json
 const settings = readJSON(SETTINGS);
 if (!settings) {
-  report('bad', 'Claude Code hooks', '~/.claude/settings.json missing or invalid', 'is Claude Code installed?');
+  // An unparseable settings.json makes Claude Code silently drop ALL hooks
+  // (seen in practice: one missing comma), so call that out explicitly.
+  if (fs.existsSync(SETTINGS))
+    report('bad', 'Claude Code hooks', '~/.claude/settings.json is INVALID JSON — Claude Code ignores every hook', `fix the syntax (try: node -e 'JSON.parse(require("fs").readFileSync("${SETTINGS}","utf8"))' to see where)`);
+  else report('bad', 'Claude Code hooks', '~/.claude/settings.json missing', 'is Claude Code installed?');
 } else {
   const hooks = settings.hooks || {};
   const events = [];
@@ -109,6 +113,33 @@ if (!settings) {
     );
     if (hookPort && String(hookPort) !== String(port))
       report('bad', 'Hook port match', `hooks POST to ${hookPort}, plugin listens on ${port}`, `CLAUDE_SESSIONS_PORT=${port} npm run hooks:install`);
+  }
+}
+
+// Codex hooks (optional) — only checked if Codex is present on this machine.
+const CODEX_HOME = process.env.CODEX_HOME || path.join(HOME, '.codex');
+if (fs.existsSync(CODEX_HOME)) {
+  const CODEX_EXPECTED = 7;
+  const codexFile = path.join(CODEX_HOME, 'hooks.json');
+  const codexHooks = readJSON(codexFile);
+  if (!codexHooks) {
+    report(
+      'warn',
+      'Codex hooks (optional)',
+      fs.existsSync(codexFile) ? 'hooks.json is INVALID JSON' : 'not installed',
+      'npm run codex-hooks:install (or the PI button), then trust them via /hooks in Codex'
+    );
+  } else {
+    const evs = new Set();
+    for (const ev of Object.keys(codexHooks.hooks || {}))
+      for (const g of codexHooks.hooks[ev] || [])
+        for (const h of g.hooks || []) if (String(h.command || '').includes(MARKER)) evs.add(ev);
+    report(
+      evs.size >= CODEX_EXPECTED ? 'ok' : 'warn',
+      'Codex hooks (optional)',
+      `${evs.size}/${CODEX_EXPECTED} events — Codex only runs them once trusted via /hooks`,
+      evs.size < CODEX_EXPECTED ? 'npm run codex-hooks:install' : null
+    );
   }
 }
 

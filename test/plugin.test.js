@@ -15,8 +15,11 @@ import path from 'node:path';
 
 import {
   EVENTS,
+  CODEX_EVENTS,
   MARKER,
+  buildCommand,
   installHooks,
+  installCodexHooks,
   uninstallHooks,
   hookStatus,
 } from '../com.ulanzi.claudesessions.ulanziPlugin/plugin/hooks.js';
@@ -204,4 +207,53 @@ test('SessionEnd for a never-seen session creates no phantom tile', () => {
   const { mgr } = makeManager();
   assert.equal(mgr.ingest(ev('SessionEnd', { reason: 'clear' })), null);
   assert.equal(mgr.sessions.size, 0);
+});
+
+// --- Codex support -----------------------------------------------------------
+
+test('buildCommand single-quotes the URL and joins origin + source with &', () => {
+  const cmd = buildCommand({ port: 9210, origin: 'mini', source: 'codex' });
+  assert.ok(cmd.includes(`'http://127.0.0.1:9210${MARKER}?origin=mini&source=codex'`), cmd);
+  // Plain local install still has no query string.
+  assert.ok(buildCommand({ port: 9210 }).includes(`'http://127.0.0.1:9210${MARKER}'`));
+});
+
+test('installCodexHooks writes every Codex event, tagged source=codex, 3s timeout', () => {
+  const p = tmpSettings(); // Codex hooks.json usually doesn't exist yet
+  const r = installCodexHooks({ port: 9210, settingsPath: p });
+  assert.equal(r.installed, CODEX_EVENTS.length);
+  const s = read(p);
+  for (const ev of CODEX_EVENTS) {
+    const h = s.hooks[ev][0].hooks[0];
+    assert.ok(h.command.includes('source=codex'), `${ev} tagged as codex`);
+    assert.equal(h.timeout, 3, `${ev} timeout within Codex's 3s cap`);
+    assert.equal(h.async, true);
+  }
+  assert.equal(hookStatus(p).port, '9210', 'port still parsed from the quoted URL');
+});
+
+test('Codex install/uninstall preserves the user\'s own Codex hooks', () => {
+  const theirs = { matcher: 'Bash', hooks: [{ type: 'command', command: '/usr/bin/true policy-check' }] };
+  const p = tmpSettings(JSON.stringify({ description: 'mine', hooks: { PreToolUse: [theirs] } }));
+  installCodexHooks({ port: 9210, settingsPath: p });
+  installCodexHooks({ port: 9210, settingsPath: p }); // idempotent
+  let s = read(p);
+  assert.equal(s.description, 'mine', 'other top-level keys kept');
+  assert.equal(ourHookCount(s), CODEX_EVENTS.length, 'one of ours per event after re-runs');
+  assert.ok(s.hooks.PreToolUse.some((g) => g.hooks[0].command === '/usr/bin/true policy-check'));
+  assert.equal(uninstallHooks({ settingsPath: p }).removed, CODEX_EVENTS.length);
+  s = read(p);
+  assert.equal(ourHookCount(s), 0);
+  assert.ok(s.hooks.PreToolUse.some((g) => g.hooks[0].command === '/usr/bin/true policy-check'));
+});
+
+test('Codex sessions are tagged, and Interrupt settles the tile to idle', () => {
+  const { mgr } = makeManager();
+  const s = mgr.ingest(ev('UserPromptSubmit', { source: 'codex' }));
+  assert.equal(s.source, 'codex');
+  assert.equal(s.state, 'thinking');
+  assert.equal(mgr.ingest(ev('Interrupt', { source: 'codex' })).state, 'idle');
+  // A Claude Code session (no source) defaults to claude.
+  const c = mgr.ingest({ hook_event_name: 'UserPromptSubmit', session_id: 'claude-1', cwd: '/x' });
+  assert.equal(c.source, 'claude');
 });

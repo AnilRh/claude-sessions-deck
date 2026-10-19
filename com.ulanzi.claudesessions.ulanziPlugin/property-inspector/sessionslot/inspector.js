@@ -85,11 +85,13 @@ function fillForm(config, focusApps) {
   applying = false;
 }
 
-function renderHooks(status, pluginPort) {
-  const el = document.getElementById('hooksStatus');
+// Shared by the Claude Code and Codex rows. Codex is optional, so a missing
+// ~/.codex/hooks.json just reads "not installed" rather than an error.
+function renderHooks(status, pluginPort, elId = 'hooksStatus', missingText = 'Claude Code not found') {
+  const el = document.getElementById(elId);
   if (!status || !status.settingsExists) {
     el.className = 'hooks-status bad';
-    el.textContent = 'Claude Code not found';
+    el.textContent = missingText;
     return;
   }
   const n = status.events.length;
@@ -120,6 +122,8 @@ $UD.onSendToPropertyInspector((jsn) => {
     fillForm(payload.config, payload.focusApps);
   } else if (payload.type === 'hooks') {
     renderHooks(payload.status, payload.pluginPort);
+  } else if (payload.type === 'codexHooks') {
+    renderHooks(payload.status, payload.pluginPort, 'codexHooksStatus', 'not installed');
   }
 });
 
@@ -129,6 +133,13 @@ document.getElementById('hooksInstall').addEventListener('click', () => {
 });
 document.getElementById('hooksRemove').addEventListener('click', () => {
   $UD.sendToPlugin({ type: 'hooksUninstall' });
+});
+document.getElementById('codexHooksInstall').addEventListener('click', () => {
+  document.getElementById('codexHooksStatus').textContent = 'installing…';
+  $UD.sendToPlugin({ type: 'codexHooksInstall' });
+});
+document.getElementById('codexHooksRemove').addEventListener('click', () => {
+  $UD.sendToPlugin({ type: 'codexHooksUninstall' });
 });
 
 for (const id of FIELDS) {

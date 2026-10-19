@@ -5,6 +5,7 @@
 // heartbeat that recovers from `waiting`).
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { execFile } from 'child_process';
 import { STATES } from './renderer.js';
@@ -100,6 +101,7 @@ export default class SessionManager {
         stateSince: typeof s.stateSince === 'number' ? s.stateSince : this.now(),
         lastEventAt,
         origin: typeof s.origin === 'string' ? s.origin : 'local',
+        source: s.source === 'codex' ? 'codex' : 'claude',
         transcriptPath: typeof s.transcriptPath === 'string' ? s.transcriptPath : '',
         title: typeof s.title === 'string' ? s.title : null,
         titleCheckedAt: 0, // force a re-check after restart
@@ -173,6 +175,7 @@ export default class SessionManager {
         stateSince: this.now(),
         lastEventAt: this.now(),
         origin: typeof payload.origin === 'string' ? payload.origin : 'local',
+        source: payload.source === 'codex' ? 'codex' : 'claude',
         transcriptPath: '',
         title: null, // resolved session title (deck name), '' = checked/none
         titleCheckedAt: 0,
@@ -223,6 +226,10 @@ export default class SessionManager {
       }
       case 'Stop':
         return STATES.DONE_UNREAD;
+      case 'Interrupt':
+        // Codex: the user stopped the turn themselves, so they're already at the
+        // session — nothing needs their attention.
+        return STATES.IDLE;
       case 'StopFailure':
         // Turn ended in an API error (rate limit / overloaded / auth). A real
         // error state, distinct from a normal finish. Tool-level failures
@@ -356,13 +363,21 @@ export default class SessionManager {
    * catch a later rename). Fire-and-forget; never blocks the caller.
    */
   maybeResolveTitle(session) {
-    if (!session || !session.transcriptPath) return;
+    if (!session) return;
+    const codex = session.source === 'codex';
+    if (!codex && !session.transcriptPath) return;
     const interval = session.title ? TITLE_RECHECK_MS : TITLE_RETRY_MS;
     const now = this.now();
     if (now - (session.titleCheckedAt || 0) < interval) return;
 
     let read;
-    if (session.origin && session.origin !== 'local') {
+    if (codex) {
+      // Codex keeps thread names in ~/.codex/session_index.jsonl, keyed by the
+      // same session id the hooks send. Local machine only for now.
+      if (session.origin && session.origin !== 'local') return;
+      session.titleCheckedAt = now;
+      read = readCodexTitle(session.sessionId);
+    } else if (session.origin && session.origin !== 'local') {
       const target = this.servers[session.origin] && this.servers[session.origin].sshTarget;
       if (!target) return; // no way to reach that machine
       // Cap concurrent SSH reads so many remote sessions firing at once can't
@@ -421,6 +436,33 @@ function parseTitleFromText(text) {
 }
 
 // Local transcript: read only the head + tail to bound cost.
+// Codex names threads in session_index.jsonl as {"id","thread_name","updated_at"}
+// lines (appended on rename); the last line for an id is the current name.
+function readCodexTitle(sessionId) {
+  if (!/^[\w-]{1,64}$/.test(sessionId)) return Promise.resolve(null);
+  const index = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'session_index.jsonl');
+  return new Promise((resolve) => {
+    execFile(
+      'grep',
+      ['-aF', sessionId, index],
+      { timeout: 8000, maxBuffer: 4 * 1024 * 1024 },
+      (_err, stdout) => {
+        let name = null;
+        for (const line of (stdout || '').split('\n')) {
+          if (!line) continue;
+          try {
+            const o = JSON.parse(line);
+            if (o.id === sessionId && typeof o.thread_name === 'string' && o.thread_name.trim()) {
+              name = o.thread_name.trim();
+            }
+          } catch {}
+        }
+        resolve(name);
+      }
+    );
+  });
+}
+
 function readTranscriptTitle(file) {
   // grep just the title lines out of the whole file (any size), so a title record
   // buried in the middle of a long transcript is still found. Cheap — only the

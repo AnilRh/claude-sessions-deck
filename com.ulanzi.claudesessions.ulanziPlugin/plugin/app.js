@@ -5,7 +5,14 @@ import HookServer from './hook-server.js';
 import { renderTile, tileCacheKey, formatElapsed, STATES } from './renderer.js';
 import { focusApp, FOCUS_APPS, setDesktopMode } from './focus.js';
 import { loadConfig, saveConfig, sanitize, DEFAULTS, SESSIONS_PATH } from './config.js';
-import { installHooks, uninstallHooks, hookStatus } from './hooks.js';
+import {
+  installHooks,
+  uninstallHooks,
+  hookStatus,
+  installCodexHooks,
+  codexHookStatus,
+  codexHooksPath,
+} from './hooks.js';
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
@@ -150,6 +157,7 @@ function sessionProps(session, now) {
     frame: session.state === STATES.THINKING && config.animateThinking ? frame : 0,
     serverLabel: session.origin && session.origin !== 'local' ? session.origin : '',
     freshness: freshnessOf(session, now),
+    source: session.source === 'codex' ? 'codex' : '',
   };
 }
 
@@ -213,6 +221,7 @@ function boardState() {
       name: props.projectName,
       elapsed: props.elapsed,
       serverLabel: props.serverLabel,
+      source: props.source || 'claude',
       svg: renderTile(props),
     };
   });
@@ -350,6 +359,10 @@ $UD.onSetActive(() => {
 // persisted by the main service in config.json, not the Studio settings API).
 function sendHookStatus(context) {
   $UD.sendToPropertyInspector({ type: 'hooks', status: hookStatus(), pluginPort: config.httpPort }, context);
+  $UD.sendToPropertyInspector(
+    { type: 'codexHooks', status: codexHookStatus(), pluginPort: config.httpPort },
+    context
+  );
 }
 
 $UD.onSendToPlugin(async (msg) => {
@@ -378,6 +391,25 @@ $UD.onSendToPlugin(async (msg) => {
       $UD.toast(`Claude Sessions: removed ${r.removed} hooks`);
     } catch (e) {
       log(`hook uninstall failed: ${e?.message}`);
+    }
+    sendHookStatus(msg.context);
+  } else if (payload.type === 'codexHooksInstall') {
+    // Codex requires new hooks to be reviewed/trusted once (/hooks in Codex)
+    // before they run, so say so in the toast.
+    try {
+      const r = installCodexHooks({ port: config.httpPort });
+      $UD.toast(`Claude Sessions: installed ${r.installed} Codex hooks — trust them once via /hooks in Codex`);
+    } catch (e) {
+      log(`codex hook install failed: ${e?.message}`);
+      $UD.toast(`Claude Sessions: Codex hook install failed — ${e?.message || 'error'}`);
+    }
+    sendHookStatus(msg.context);
+  } else if (payload.type === 'codexHooksUninstall') {
+    try {
+      const r = uninstallHooks({ settingsPath: codexHooksPath() });
+      $UD.toast(`Claude Sessions: removed ${r.removed} Codex hooks`);
+    } catch (e) {
+      log(`codex hook uninstall failed: ${e?.message}`);
     }
     sendHookStatus(msg.context);
   }

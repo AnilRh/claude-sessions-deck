@@ -22,20 +22,45 @@ export const EVENTS = Object.freeze([
   'SessionEnd',
 ]);
 
+// OpenAI Codex (CLI, IDE, and the ChatGPT desktop app's Codex mode) has a hooks
+// system with the same file shape and nearly the same events/payload as Claude
+// Code, so the same installer writes ~/.codex/hooks.json. Codex has no
+// Notification/StopFailure; it adds Interrupt (user stopped the turn).
+export const CODEX_EVENTS = Object.freeze([
+  'UserPromptSubmit',
+  'PreToolUse',
+  'PermissionRequest',
+  'PostToolUse',
+  'Stop',
+  'Interrupt',
+  'SessionEnd',
+]);
+// Codex caps SessionEnd/Interrupt hook timeouts at 3s; curl gives up after 1s anyway.
+export const CODEX_TIMEOUT = 3;
+
 function defaultSettingsPath() {
   return path.join(os.homedir(), '.claude', 'settings.json');
 }
 
-// stdin (the hook payload JSON) is forwarded as the POST body. --max-time 1 +
-// `|| true` + async keeps Claude Code from ever being slowed or broken when the
-// plugin isn't running. `origin` tags a remote machine (omitted = this machine).
-export function buildCommand({ host = '127.0.0.1', port = 9210, origin = '' } = {}) {
-  const q = origin ? `?origin=${origin}` : '';
-  return `curl -s -o /dev/null --max-time 1 -X POST -H 'Content-Type: application/json' --data-binary @- http://${host}:${port}${MARKER}${q} || true`;
+export function codexHooksPath() {
+  return path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'hooks.json');
 }
 
-function hookEntry(command) {
-  return { matcher: '', hooks: [{ type: 'command', command, async: true, timeout: 5 }] };
+// stdin (the hook payload JSON) is forwarded as the POST body. --max-time 1 +
+// `|| true` + async keeps the agent from ever being slowed or broken when the
+// plugin isn't running. `origin` tags a remote machine (omitted = this machine);
+// `source` tags the agent (omitted = Claude Code). The URL is single-quoted so
+// `?` and `&` are never glob/background characters to the hook's shell.
+export function buildCommand({ host = '127.0.0.1', port = 9210, origin = '', source = '' } = {}) {
+  const params = [];
+  if (origin) params.push(`origin=${origin}`);
+  if (source) params.push(`source=${source}`);
+  const q = params.length ? `?${params.join('&')}` : '';
+  return `curl -s -o /dev/null --max-time 1 -X POST -H 'Content-Type: application/json' --data-binary @- 'http://${host}:${port}${MARKER}${q}' || true`;
+}
+
+function hookEntry(command, timeout = 5) {
+  return { matcher: '', hooks: [{ type: 'command', command, async: true, timeout }] };
 }
 
 function isOurs(h) {
@@ -102,7 +127,15 @@ export function hookStatus(settingsPath = defaultSettingsPath()) {
  * safe to re-run after a port or event-list change (unlike a pure append).
  * Creates settings.json (and ~/.claude) if absent.
  */
-export function installHooks({ host, port, origin, settingsPath = defaultSettingsPath() } = {}) {
+export function installHooks({
+  host,
+  port,
+  origin,
+  source,
+  settingsPath = defaultSettingsPath(),
+  events = EVENTS,
+  timeout = 5,
+} = {}) {
   let raw = null;
   let settings = {};
   try {
@@ -121,13 +154,23 @@ export function installHooks({ host, port, origin, settingsPath = defaultSetting
     settings.hooks[ev] = stripOurs(settings.hooks[ev]);
     if (!settings.hooks[ev].length) delete settings.hooks[ev];
   }
-  const command = buildCommand({ host, port, origin });
-  for (const ev of EVENTS) {
+  const command = buildCommand({ host, port, origin, source });
+  for (const ev of events) {
     settings.hooks[ev] = settings.hooks[ev] || [];
-    settings.hooks[ev].push(hookEntry(command));
+    settings.hooks[ev].push(hookEntry(command, timeout));
   }
   writeSettingsAtomic(settingsPath, settings);
-  return { installed: EVENTS.length, backup, host: host || '127.0.0.1', port: port || 9210, origin: origin || '' };
+  return { installed: events.length, backup, host: host || '127.0.0.1', port: port || 9210, origin: origin || '' };
+}
+
+/** Install/reconcile the Codex hooks in ~/.codex/hooks.json (same merge-safety). */
+export function installCodexHooks({ port, settingsPath = codexHooksPath() } = {}) {
+  return installHooks({ port, source: 'codex', settingsPath, events: CODEX_EVENTS, timeout: CODEX_TIMEOUT });
+}
+
+/** hookStatus for ~/.codex/hooks.json, with the Codex event count as the target. */
+export function codexHookStatus(settingsPath = codexHooksPath()) {
+  return { ...hookStatus(settingsPath), expected: CODEX_EVENTS.length };
 }
 
 /** Remove exactly our marker hooks; leave everything else untouched. */

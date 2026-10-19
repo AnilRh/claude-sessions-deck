@@ -27,6 +27,8 @@ vision, so you never leave Claude stuck.
   with no Stream Deck at all.
 - **Multiple machines** — a second machine's sessions show up too, over an SSH
   tunnel you control.
+- **OpenAI Codex too** — Codex sessions (CLI, IDE, or the ChatGPT app's Codex
+  mode) appear alongside Claude's, marked with a small hexagon.
 - **Local-only, no cloud** — everything runs on `127.0.0.1`; no data leaves your
   machine.
 
@@ -96,6 +98,22 @@ detected automatically; config lives in
 `com.ulanzi.claudesessions.ulanziPlugin/config.json` (hand-edit and restart — the
 Property Inspector is a Studio feature). Don't run headless *and* Ulanzi Studio
 together: both contend for the hook port.
+
+## OpenAI Codex too
+
+Codex has a hooks system almost identical to Claude Code's, so its sessions can
+share the board. Install the Codex hooks from the Property Inspector (**Codex
+hooks → Install / update**) or from a checkout:
+
+```bash
+npm run codex-hooks:install    # writes ~/.codex/hooks.json (merge-safe, backup first)
+```
+
+Then open Codex and run **`/hooks`** to trust them — Codex skips new or changed
+hooks until you do. Codex tiles behave exactly like Claude ones (thinking,
+waiting on you, done, plus Codex's *interrupt* → idle), carry a small hexagon in
+the top-left corner, and take their names from your Codex thread titles.
+`npm run codex-hooks:uninstall` removes them.
 
 ## Configuration
 
@@ -220,9 +238,10 @@ each configured remote machine — and prints the fix for anything wrong.
 
 ## Scope
 
-Tracks Claude Code sessions only (including the Code tab in Claude Desktop — same
-hooks). Claude Desktop *chat* conversations expose no event API and are out of
-scope, as is focusing a *specific* terminal window by session (unreliable).
+Tracks Claude Code sessions (including the Code tab in Claude Desktop) and
+OpenAI Codex sessions — the agents that expose lifecycle hooks. Plain *chat*
+conversations in Claude Desktop or the ChatGPT app have no hooks or event API
+(confirmed as of October 2026) and are out of scope, as is focusing a *specific* terminal window by session (unreliable).
 Multiple deck profiles are supported. macOS-only: the focus/jump, Desktop
 integration, and setup scripts use macOS-specific APIs — the status display is
 OS-agnostic in principle, but not yet ported to Windows.

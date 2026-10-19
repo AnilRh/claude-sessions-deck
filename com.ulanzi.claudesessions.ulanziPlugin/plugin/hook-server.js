@@ -173,6 +173,8 @@ export default class HookServer {
     // Validated to a short token so it's safe to store, render, and key config on.
     const originParam = url.searchParams.get('origin');
     const origin = originParam && /^[\w-]{1,32}$/.test(originParam) ? originParam : null;
+    // Source tags which agent sent the event (omitted = Claude Code). Allow-listed.
+    const source = url.searchParams.get('source') === 'codex' ? 'codex' : null;
     let size = 0;
     const chunks = [];
     req.on('data', (chunk) => {
@@ -199,6 +201,9 @@ export default class HookServer {
       // body, which would bypass the token validation above.
       delete payload.origin;
       if (origin) payload.origin = origin;
+      // Same for source: only the validated query param counts, never the body.
+      delete payload.source;
+      if (source) payload.source = source;
       try {
         this.onEvent(payload);
       } catch (e) {

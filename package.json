@@ -16,6 +16,8 @@
     "install:plugin": "bash scripts/install-plugin.sh",
     "hooks:install": "node scripts/hooks-install.js",
     "hooks:uninstall": "node scripts/hooks-uninstall.js",
+    "codex-hooks:install": "node scripts/codex-hooks.js install",
+    "codex-hooks:uninstall": "node scripts/codex-hooks.js uninstall",
     "fake-events": "bash scripts/fake-events.sh",
     "package": "bash scripts/package-plugin.sh",
     "images": "node scripts/gen-marketplace-images.mjs",
