@@ -1,7 +1,7 @@
 {
   "Author": "Anil Rhemtulla",
   "Name": "Claude Sessions",
-  "Description": "Live status board for concurrent Claude Code sessions",
+  "Description": "Live status board for concurrent Claude Code and OpenAI Codex sessions",
   "Icon": "assets/store-icon.png",
   "Version": "1.1.0",
   "Category": "Claude Code",

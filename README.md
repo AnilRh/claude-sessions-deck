@@ -116,7 +116,13 @@ app's chat box; if you only have the ChatGPT app, it ships the CLI — run
 Terminal, then type `/hooks`. Codex tiles behave exactly like Claude ones (thinking,
 waiting on you, done, plus Codex's *interrupt* → idle), carry a small hexagon in
 the top-left corner, and take their names from your Codex thread titles.
-`npm run codex-hooks:uninstall` removes them.
+Pressing one opens that thread in the ChatGPT app (`codex://threads/<id>`), or
+resumes it in Terminal with `codex resume` when **Focus app** is *Terminal
+(resume)*. `npm run codex-hooks:uninstall` removes them.
+
+Codex support is **this Mac only** for now: `remote-hooks` installs Claude Code
+hooks on a second machine but not Codex ones, and Codex titles are read from this
+Mac's `~/.codex`.
 
 ## Configuration
 
@@ -236,6 +242,12 @@ each configured remote machine — and prints the fix for anything wrong.
   finishes (the permission-resume gap).
 - **Focus press does nothing** — System Settings → Privacy & Security →
   Automation → allow Ulanzi Studio to control the target app.
+- **Codex tiles never appear** — the Codex hooks must be trusted once: run the
+  Codex CLI, type `/hooks`, trust them, then restart the ChatGPT app.
+- **What is the plugin actually doing?** <http://127.0.0.1:9210/board/stats>
+  shows live counters: hook events received, tile pushes to the deck, queued
+  pushes, keys, and sessions. `events` not increasing while you work means hooks
+  aren't reaching the plugin; `pending` staying high means the deck is behind.
 
 </details>
 

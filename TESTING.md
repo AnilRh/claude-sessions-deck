@@ -82,15 +82,33 @@ With the plugin running (Studio or headless), open
   fake events (`scripts/fake-events.sh`) light tiles, log stays quiet (no
   reconnect churn).
 
-## 5. Automated tests
+## 5. OpenAI Codex
+
+- **Install**: Property Inspector → *Codex hooks → Install / update* (or
+  `npm run codex-hooks:install`) → `~/.codex/hooks.json` has 7 events, each
+  URL ending `?source=codex`; `npm run doctor` shows *Codex hooks 7/7*.
+- **Trust**: run the Codex CLI (bundled at
+  `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`), `/hooks`,
+  trust them; restart the ChatGPT app.
+- **Tiles**: a Codex task in the terminal *and* one in the ChatGPT app's Codex
+  mode each appear with the top-left hexagon, go thinking → done, and take the
+  thread's name within ~10s (even for a task that finishes in a few seconds).
+- **Approval**: a Codex permission prompt turns the tile amber.
+- **Interrupt**: stopping a running turn turns the tile idle.
+- **Press**: opens that exact thread in the ChatGPT app; with Focus app =
+  *Terminal (resume)* it opens Terminal running `codex resume <id>`.
+
+## 6. Automated tests
 
 `npm test` (zero dependencies, Node's built-in runner) covers the hook
 installer's merge-safety — foreign hooks survive install/reconcile/
 port-change/uninstall, corrupt settings are left untouched — and the session
 state machine's transitions (permission-gap recovery, SessionEnd not
-re-alerting acknowledged tiles, error handling, phantom-session guards).
+re-alerting acknowledged tiles, error handling, phantom-session guards), plus
+Codex: hook install/uninstall merge-safety, `source=codex` tagging, quoted hook
+URLs, and `Interrupt` → idle.
 
-## 6. Automated harness (used during development)
+## 7. Automated harness (used during development)
 
 A mock Ulanzi Studio (WS server + key-event injector) lives at
 `scripts/mock-studio.cjs`; it decodes every pushed tile back to its state

@@ -118,6 +118,9 @@
         Settings apply to all Session Slot keys. Claude Code needs these hooks to
         report session events — use <strong>Install / update</strong> above (it
         targets the port set here). Take effect on the next session you start.
+        Codex hooks are optional: after installing, trust them once by running
+        the Codex CLI and typing <code>/hooks</code> (the ChatGPT app's chat box
+        can't), then restart the ChatGPT app.
         A remote machine also needs the reverse SSH tunnel plus its hooks —
         <code>ORIGIN=&lt;label&gt; npm run remote-hooks</code> and
         <code>remote-tunnel-setup.sh</code>.

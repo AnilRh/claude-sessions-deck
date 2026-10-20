@@ -6,8 +6,8 @@ in the [README](README.md); this file is the stuff most users don't need.
 ## Architecture
 
 ```
-Claude Code hooks (~/.claude/settings.json)
-        │ async curl POST per event (max 1s, || true — never blocks Claude)
+Claude Code hooks (~/.claude/settings.json)   OpenAI Codex hooks (~/.codex/hooks.json, ?source=codex)
+        │ async curl POST per event (max 1s, || true — never blocks the agent)
         ▼
 HTTP server  127.0.0.1:9210                   plugin/hook-server.js
   (hook receiver + web board routes)
@@ -31,13 +31,13 @@ Key modules (all under `com.ulanzi.claudesessions.ulanziPlugin/plugin/`):
 | File | Responsibility |
 |---|---|
 | `app.js` | Entry point; wires the SDK, hook server, session manager, timers; press handling; config |
-| `hook-server.js` | Loopback HTTP server: hook receiver (`POST /claude-sessions-event`) + web-board routes (`GET /board*`, `POST /board/action`) |
-| `session-manager.js` | `session_id → state` machine, slot assignment/ordering, title resolution, persistence |
+| `hook-server.js` | Loopback HTTP server: hook receiver (`POST /claude-sessions-event`, with allow-listed `?origin=` machine and `?source=codex` agent tags) + web-board routes (`GET /board*`, `/board/stats`, `POST /board/action`) |
+| `session-manager.js` | `session_id → state` machine, slot assignment/ordering, persistence; titles from the Claude transcript (custom-title > ai-title > summary, grepped anywhere in the file) or, for Codex, `~/.codex/session_index.jsonl` thread names |
 | `renderer.js` | Pure `state → 200×200 SVG data URL`, cached; the single source of tile design (deck, board, and generated images all use it) |
 | `board.js` | The web board page, PWA manifest, and icon |
-| `focus.js` | Press actions: Desktop deep-link, terminal resume, SSH resume |
+| `focus.js` | Press actions: Claude Desktop deep-link, terminal resume, SSH resume; Codex → `codex://threads/<id>` or `codex resume` |
 | `slot-registry.js` | Maps Studio key contexts → slot order (row-major, multi-profile aware) |
-| `config.js`, `hooks.js` | Config load/save; the shared, merge-safe hook installer |
+| `config.js`, `hooks.js` | Config load/save; the shared, merge-safe hook installer (Claude Code and Codex) |
 
 ## Security model
 
