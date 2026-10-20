@@ -110,7 +110,10 @@ npm run codex-hooks:install    # writes ~/.codex/hooks.json (merge-safe, backup 
 ```
 
 Then open Codex and run **`/hooks`** to trust them — Codex skips new or changed
-hooks until you do. Codex tiles behave exactly like Claude ones (thinking,
+hooks until you do. `/hooks` only works in the Codex *terminal* app, not the ChatGPT
+app's chat box; if you only have the ChatGPT app, it ships the CLI — run
+`"/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"` in
+Terminal, then type `/hooks`. Codex tiles behave exactly like Claude ones (thinking,
 waiting on you, done, plus Codex's *interrupt* → idle), carry a small hexagon in
 the top-left corner, and take their names from your Codex thread titles.
 `npm run codex-hooks:uninstall` removes them.
