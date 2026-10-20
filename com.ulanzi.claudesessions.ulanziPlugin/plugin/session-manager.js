@@ -14,6 +14,11 @@ const HEARTBEAT_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailu
 const SAVE_DEBOUNCE_MS = 400;
 const MAX_SSH_TITLE_READS = 3; // cap concurrent ssh title reads across sessions
 const TITLE_RETRY_MS = 10 * 1000; // re-read this often (on events) while no title yet
+// Titles are often written a few seconds AFTER a session starts (Claude's
+// ai-title, Codex's thread name), and a short task can finish before the next
+// event-driven re-read is allowed — so an untitled session also gets a few
+// timed retries, independent of events.
+const TITLE_TIMED_RETRIES = 6;
 const TITLE_RECHECK_MS = 90 * 1000; // re-read this often (on events) once a title is known
 // grep pattern for the transcript records that carry a title. A title can sit
 // ANYWHERE in the file (a rename done early is buried mid-file as the chat grows),
@@ -397,8 +402,16 @@ export default class SessionManager {
       .then((title) => {
         if (title === null) {
           if (session.title === null) session.title = ''; // resolved, none found
+          if (!session.title && (session.titleRetries || 0) < TITLE_TIMED_RETRIES) {
+            session.titleRetries = (session.titleRetries || 0) + 1;
+            const t = setTimeout(() => {
+              if (this.sessions.get(session.sessionId) === session) this.maybeResolveTitle(session);
+            }, TITLE_RETRY_MS + 500);
+            if (typeof t.unref === 'function') t.unref();
+          }
           return;
         }
+        session.titleRetries = 0;
         if (title !== session.title) {
           session.title = title;
           this.onChange(session);
