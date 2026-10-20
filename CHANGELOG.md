@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-10-19
 
 ### Added
 
@@ -8,14 +8,16 @@
   desktop app's Codex mode) now appear on the deck and web board via Codex's own
   hooks, marked with a small hexagon and named from your Codex thread titles.
   One-click install in the Property Inspector, or `npm run codex-hooks:install`;
-  trust them once via `/hooks` in Codex.
+  trust them once via `/hooks` in Codex. Pressing a Codex tile opens that thread
+  in the ChatGPT app (or resumes it in Terminal in *Terminal (resume)* mode).
 - `/board/stats` diagnostics endpoint (push rate, events received, sessions).
 
 ### Fixed
 
 - Session names falling back to the folder name ("Personal", "Personal·2") on
   long conversations — the title is now found anywhere in the transcript, and the
-  current `ai-title` record format is recognized.
+  current `ai-title` record format is recognized. Untitled sessions are also
+  re-checked on a timer, so a short task no longer keeps its folder name.
 - A permission prompt's amber tile could flip back to "thinking" when hook events
   arrived out of order.
 - Duplicate plugin processes after a Ulanzi Studio restart could leave the deck

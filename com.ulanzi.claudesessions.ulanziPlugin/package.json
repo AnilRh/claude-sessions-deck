@@ -1,7 +1,7 @@
 {
   "name": "claude-sessions-ulanzi-plugin",
-  "version": "1.1.0",
-  "description": "Ulanzi D200 status board for concurrent Claude Code sessions",
+  "version": "1.2.0",
+  "description": "Ulanzi D200 status board for concurrent Claude Code and OpenAI Codex sessions",
   "main": "plugin/app.js",
   "type": "module",
   "license": "MIT",
