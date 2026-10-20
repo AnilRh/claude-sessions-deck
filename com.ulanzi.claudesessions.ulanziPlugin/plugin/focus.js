@@ -211,12 +211,12 @@ function resumeRemote(sshTarget, sessionId, cwd, claudePath, log) {
 // `claude --resume <id>` is project-scoped. Terminal.app specifically, for its
 // reliable scripting; opens a new window and forks if the session is already
 // live elsewhere.
-function resumeLocalTerminal(cwd, sessionId, log) {
+function resumeLocalTerminal(cwd, sessionId, log, resumeCmd = 'claude --resume') {
   if (!SESSION_ID_RE.test(sessionId)) {
     log(`invalid local resume (session='${sessionId}')`);
     return;
   }
-  let inner = `claude --resume ${sessionId}`;
+  let inner = `${resumeCmd} ${sessionId}`;
   if (typeof cwd === 'string' && /^[\w /.@:+-]{1,512}$/.test(cwd)) {
     inner = `cd '${cwd}' && ${inner}`;
   }
@@ -235,10 +235,26 @@ function resumeLocalTerminal(cwd, sessionId, log) {
   );
 }
 
+// OpenAI Codex sessions don't belong to Claude Desktop. The ChatGPT desktop app
+// owns the codex:// scheme and opens a specific thread at codex://threads/<id>
+// (the id the Codex hooks send as session_id). For Terminal mode we run
+// `codex resume <id>`, preferring the CLI bundled inside the ChatGPT app since
+// many users never install `codex` on their PATH.
+const CODEX_BUNDLED_CLI = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex';
+function codexCli() {
+  return fs.existsSync(CODEX_BUNDLED_CLI) ? CODEX_BUNDLED_CLI : 'codex';
+}
+
+function openCodexThread(sessionId, log) {
+  execFile('open', [`codex://threads/${sessionId}`], { timeout: 5000 }, (err) => {
+    if (err) log(`opening the Codex thread failed: ${err.message} — is the ChatGPT app installed?`);
+  });
+}
+
 /**
  * Bring a session's host into view on key press.
  * @param {string} app configured focus app (terminal name, 'Terminal (resume)', or 'Claude')
- * @param {{sessionId:string, cwd?:string, origin?:string}} session
+ * @param {{sessionId:string, cwd?:string, origin?:string, source?:string}} session
  * @param {Record<string,{sshTarget:string, claudePath?:string}>} servers origin -> ssh target
  * @param {(msg:string)=>void} [log]
  */
@@ -246,6 +262,23 @@ export function focusApp(app, session, servers = {}, log = () => {}) {
   const sessionId = session && session.sessionId;
   const cwd = session && session.cwd;
   const origin = (session && session.origin) || 'local';
+
+  // Codex session -> its thread in the ChatGPT app, or `codex resume` in
+  // Terminal when the focus app is "Terminal (resume)". The Claude-specific
+  // focus targets (claude:// links, `claude --resume`) can't open it.
+  if (session && session.source === 'codex') {
+    if (origin !== 'local') {
+      log(`Codex session on '${origin}': opening Codex on another machine isn't supported yet`);
+      return;
+    }
+    if (typeof sessionId !== 'string' || !SESSION_ID_RE.test(sessionId)) {
+      log(`invalid Codex session id '${sessionId}'`);
+      return;
+    }
+    if (app === 'Terminal (resume)') resumeLocalTerminal(cwd, sessionId, log, `'${codexCli()}' resume`);
+    else openCodexThread(sessionId, log);
+    return;
+  }
 
   // Remote session -> SSH resume in Terminal (Desktop can't open a remote transcript).
   if (origin !== 'local') {
